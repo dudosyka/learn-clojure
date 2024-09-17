@@ -1,0 +1,30 @@
+name: Push pipeline
+
+on: push
+
+jobs:
+  validate-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@main
+
+      - name: Prepare java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Install Clojure CLI
+        uses: ./
+        with:
+          cli: latest
+          clj-kondo: latest
+          cljfmt: latest
+
+      - name: Check format
+        run: cljfmt check
+
+      - name: Lint
+        run: clj-kondo --lint src --config '{:output {:pattern "::{{level}} file={{filename}},line={{row}},col={{col}}::{{message}}"}}
+
