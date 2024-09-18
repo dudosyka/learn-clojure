@@ -31,3 +31,6 @@ jobs:
       - name: Lint
         run: clj-kondo --lint src
 
+      - name: Test
+        run: clojure -X:test
+

@@ -1,5 +1,4 @@
-(ns euler.problem-10
-  (:require [core :as core]))
+(ns euler.problem-10)
 
 (defn get-n-size-map [n]
   (loop [i 2 arr {}]
@@ -13,16 +12,17 @@
       (recur (+ i n) (assoc new-map i false) size)
       new-map)))
 
-(defn sum-primes
-  ([n] (sum-primes n 2 (get-n-size-map n)))
+(defn find-primes
+  ([n] (find-primes n 2 (get-n-size-map n)))
   ([n cur values]
    (if (<= cur (Math/ceil (Math/sqrt n)))
      (recur n (+ cur 1) (if (get values cur)
                           (remove-divides cur values)
                           values))
-     (reduce + (map first (filter second values))))))
+     (conj (mapv first (filter second values)) 1))))
+
+(defn sum-primes
+  ([n] (reduce + (find-primes n))))
 
 (defn solve [opts]
-  (core/compute-with-timer #(sum-primes ('n opts))))
-
-(solve {'n 100})
+  (sum-primes ('n opts)))
