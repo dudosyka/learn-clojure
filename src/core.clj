@@ -6,6 +6,3 @@
         computationTime (- (System/currentTimeMillis) startAt)]
     (println "Completed in: " computationTime "ms")
     result))
-
-(defn run [opts]
-  (println opts))
