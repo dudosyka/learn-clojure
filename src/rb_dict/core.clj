@@ -1,6 +1,6 @@
-(ns rb-tree.core
+(ns rb-dict.core
   (:refer-clojure :exclude [merge map filter keys into get conj])
-  (:require [rb-tree.vertex :as rb-tree])
+  (:require [rb-dict.tree :as rb-tree])
   (:import (clojure.lang IFn IPersistentMap)))
 
 (defprotocol IDict
@@ -39,7 +39,7 @@
     (= (seq this) (seq obj)))
   (seq [_]
     (clojure.core/into '() (reverse (rb-tree/entries rb-tree))))
-  rb-tree.vertex/MergableValue
+  rb-dict.tree/MergableValue
   (merge [_ dict]
     (RBDict. (rb-tree/merge rb-tree (.-rb-tree dict)))))
 

@@ -4,8 +4,8 @@
             [clojure.test.check :as check]
             [clojure.test.check.generators :as gen]
             [clojure.test.check.properties :as prop]
-            [rb-tree.core :refer [conj dict into rb-dict]]
-            [rb-tree.vertex :refer [black? red-child child-count]]))
+            [rb-dict.core :refer [conj dict into rb-dict]]
+            [rb-dict.tree :refer [black? red-child child-count]]))
 
 (def gen-dict
   (gen/fmap (fn [list] (into (rb-dict) (partition 2 list))) (gen/list gen/small-integer)))
@@ -22,7 +22,7 @@
                        (= (conj (rb-dict) dict) dict))))))
 
 (deftest test-commutative
-  (testing "Test that operations is commutative"
+  (testing "Test that conjunction operations is commutative"
     (is (check/quick-check
          100
          (prop/for-all [dict gen-dict
@@ -45,7 +45,7 @@
    (check-no-red-vertex-with-red-sons (:right dict))))
 
 (deftest test-no-red-vertex-with-red-sons
-  (testing "Test that every red vertex have two black or no sons"
+  (testing "Test that every red vertex have two black sons"
     (is (check/quick-check
          100
          (prop/for-all [dict gen-dict]

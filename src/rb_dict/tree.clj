@@ -1,4 +1,4 @@
-(ns rb-tree.vertex
+(ns rb-dict.tree
   (:refer-clojure :exclude [merge])
   (:require [clojure.core.match :refer [match]])
   (:import (clojure.lang IPersistentCollection IPersistentMap)))
@@ -203,25 +203,23 @@
   (entries-mapped [this f] (map f this))
   RBTreeVertex
   (entries-mapped [this f]
-    (if (nil? this) [] (into [] (concat
-                                 (entries-mapped (:left this) f)
-                                 [(f [(:key this) (:value this)])]
-                                 (entries-mapped (:right this) f)))))
+    (into [] (concat
+              (entries-mapped (:left this) f)
+              [(f [(:key this) (:value this)])]
+              (entries-mapped (:right this) f))))
   (entries [this] (entries-mapped this identity))
   (entries-filtered [this f]
-    (if (nil? this) [] (let [entry [(:key this) (:value this)]]
-                         (into [] (concat
-                                   (entries-filtered (:left this) f)
-                                   (if (f entry) [entry] [])
-                                   (entries-filtered (:right this) f))))))
+    (let [entry [(:key this) (:value this)]]
+      (into [] (concat
+                (entries-filtered (:left this) f)
+                (if (f entry) [entry] [])
+                (entries-filtered (:right this) f)))))
   (entries-reduced [this start f side]
     (entries-reduced
      (get this (opposite side))
      (f (entries-reduced (get this side) start f side) [(:key this) (:value this)])
-     f side)))
-
-(extend-type nil
-  Sequential
+     f side))
+  nil
   (entries [_] [])
   (entries-filtered [_ _] [])
   (entries-mapped [_ _] [])

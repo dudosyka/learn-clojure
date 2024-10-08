@@ -1,7 +1,7 @@
-(ns rb-tree-test
+(ns rb-tree-unit-test
   (:require [clojure.test :refer [deftest is testing]])
   (:refer-clojure :exclude [merge map filter keys into get conj abs])
-  (:require [rb-tree.core :refer [add conj delete filter get into keys map rb-dict reduce-left reduce-right values]]))
+  (:require [rb-dict.core :refer [add conj delete filter get into keys map rb-dict reduce-left reduce-right values]]))
 
 (deftest test-rb-creation
   (testing "Test dict creation"
