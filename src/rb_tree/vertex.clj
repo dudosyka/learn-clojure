@@ -20,12 +20,16 @@
   (if (nil? vertex)
     false
     (= (:color vertex) :red)))
-(defn- red-child [vertex] (->> [:right :left]
-                               (filter
-                                (fn [son-side]
-                                  (let [son (get vertex son-side)]
-                                    (and (some? son) (red? son)))))
-                               (first)))
+(defn black? [vertex]
+  (if (nil? vertex)
+    true
+    (= (:color vertex) :black)))
+(defn red-child [vertex] (->> [:right :left]
+                              (filter
+                               (fn [son-side]
+                                 (let [son (get vertex son-side)]
+                                   (and (some? son) (red? son)))))
+                              (first)))
 (defn- make-black [vertex]
   (if (nil? vertex)
     vertex
@@ -41,7 +45,7 @@
   (= (compare k1 k2) 0))
 
 (defn- opposite [side] (if (= side :left) :right :left))
-(defn- child-count [vertex]
+(defn child-count [vertex]
   (->> [:right :left]
        (filter #(not (nil? (get vertex %))))
        (count)))
@@ -200,9 +204,9 @@
   RBTreeVertex
   (entries-mapped [this f]
     (if (nil? this) [] (into [] (concat
-                                 (entries-mapped (:right this) f)
+                                 (entries-mapped (:left this) f)
                                  [(f [(:key this) (:value this)])]
-                                 (entries-mapped (:left this) f)))))
+                                 (entries-mapped (:right this) f)))))
   (entries [this] (entries-mapped this identity))
   (entries-filtered [this f]
     (if (nil? this) [] (let [entry [(:key this) (:value this)]]
@@ -241,98 +245,3 @@
         (let [[k v] (peek entries)]
           (recur (pop entries) (insert v1 k v false)))
         v1))))
-
-; Тут мы проверяем как будет работать удаление вершины (слева)
-; у которой есть ЧЕРНЫЙ БРАТ с красным СЫНОМ (с ДРУГОЙ СТОРОНЫ от удаляемого - справа) (удаление 25 элемента)
-;
-; А затем проверяем как будет работать удаление,
-; если у ЧЕРНОГО БРАТА ОБА ребенка ЧЕРНЫЕ
-; (удаление элемента 12)
-;
-; А затем снова проверяем как будет работать удаление,
-; если у ЧЕРНОГО БРАТА ОБА ребенка ЧЕРНЫЕ
-; (удаление элемента 20) В рамках этого удаления также проверяется
-; корректность работы рекурсивной перебалансировки +
-; при рекурсивном переходе к перебалансировки по ключу 19 идёт использование
-; ЧЕРНЫЙ БРАТ с красным СЫНОМ (с ТОЙ ЖЕ СТОРОНЫ)
-;(def another-tree (delete-recursive (build-rb '(2 3 4 5 10 11 12 14 15 16 17 19 20 23 25 30 22)) 30))
-;(def prepared (delete-recursive (delete-recursive another-tree 25) 12))
-;(render (delete-recursive prepared 20))
-
-;(def red-brother-tree (build-rb '(2 3 4 5 10 11 12 14 15 16)))
-;(def merged (merge red-brother-tree red-brother-tree))
-;(println (as-list red-brother-tree))
-;(println (as-list merged))
-;(def with-subtree (insert red-brother-tree 10 red-brother-tree))
-;
-;(def with-subtree (->(build-rb '(2 3 4 5 10 11 12 14))
-;                     (insert 12 with-subtree)))
-;
-;
-;(def with-subtree2 (->(build-rb '(2 3 4 5 10 11 12 14))
-;                      (insert 12 with-subtree)
-;                      (insert 10 (insert red-brother-tree 10 red-brother-tree))))
-
-;(println (as-list with-subtree (fn [[k v]] (if (= (type v) rb_tree_dict.internal.RBTreeVertex) [k (as-list v)] [k v]))))
-;
-;(def merged-subtree (merge with-subtree with-subtree))
-;(println (render merged-subtree))
-
-;(render red-brother-tree)
-;(render (insert red-brother-tree 10 34))
-;
-;(println "---------------------------------")
-; {:color :black,
-; :key 3,
-; :value 1,
-; :right
-; {:color :red,
-;  :key 14,
-;  :value 1,
-;  :right {:color :black, :key 16, :value 1, :right nil, :left nil},
-;  :left
-;  {:color :black,
-;   :key 5,
-;   :value 1,
-;   :right {:color :red, :key 12, :value 1, :right nil, :left nil},
-;   :left nil}},
-; :left {:color :black, :key 2, :value 1, :right nil, :left nil}}
-; {:color :black,
-; :key 3,
-; :value 1,
-; :right
-; {:color :red,
-;  :key 14,
-;  :value 1,
-;  :right {:color :black, :key 16, :value 1, :right nil, :left nil},
-;  :left
-;  {:color :black,
-;   :key 5,
-;   :value 1,
-;   :right {:color :red, :key 12, :value 1, :right nil, :left nil},
-;   :left nil}},
-; :left {:color :black, :key 2, :value 1, :right nil, :left nil}}
-;; Проверяем случай когда удаление идёт у КРАСНОГО БРАТА (удаляем 10 элемент, его красный брат - 14)
-;(clojure.pprint/pprint (delete red-brother-tree 10))
-;(println "---------------------------------")
-;
-;; Проверяем случай когда у черного узла красный сын (удаляем элемент 15, его красный сын - 16)
-;(render (-> red-brother-tree
-;            (delete-recursive 10)
-;            (delete-recursive 15)))
-;(println "---------------------------------")
-;
-;; Это проверка на ЧЕРНОГО БРАТА (ОБА СЫНА черные)
-;; брат - 12 элемент он черный с двумя null черными сыновьями
-;(render (-> red-brother-tree
-;            (delete-recursive 10)
-;            (delete-recursive 15)
-;            (delete-recursive 16)))
-;
-;(println "---------------------------------")
-;
-;; Далее проверяем удаление красной вершины без детей это элемент 12
-;(render (-> red-brother-tree
-;            (delete-recursive 10)
-;            (delete-recursive 15)
-;            (delete-recursive 12)))

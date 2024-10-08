@@ -35,14 +35,18 @@
   (invoke [_ key value]
     (add _ key value))
   IPersistentMap
+  (equiv [this obj]
+    (= (seq this) (seq obj)))
   (seq [_]
-    (clojure.core/into '() (rb-tree/entries rb-tree)))
+    (clojure.core/into '() (reverse (rb-tree/entries rb-tree))))
   rb-tree.vertex/MergableValue
   (merge [_ dict]
     (RBDict. (rb-tree/merge rb-tree (.-rb-tree dict)))))
 
 (defn rb-dict [& values]
-  (into (RBDict. nil) (partition 2 values)))
+  (if (not (even? (count values)))
+    (throw (Exception. "Bad values count (must be even)"))
+    (into (RBDict. nil) (partition 2 values))))
 
 (def dict (rb-dict 1 (String. "a")
                    2 {:f "b" :g (rb-dict 3 4)}
@@ -50,32 +54,3 @@
                    7 '(1 23)
                    5 [1 2 3]
                    4 "d"))
-
-(def dict2 (rb-dict 1 "a"
-                    2 {:c "b" :g (rb-dict 1 "ds")}
-                    7 []
-                    5 ['(4 5 6)]
-                    6 "c"
-                    4 "d"))
-
-(def second-dict (rb-dict 1 "a"
-                          2 "b"
-                          3 dict
-                          4 "d"))
-(def second-dict2 (rb-dict 2 "b"
-                           3 dict2
-                           4 "d"))
-(println dict)
-
-(println (reduce-left dict 1 (fn [acc [_ v]] (str acc v))))
-(println (reduce-right dict 1 (fn [acc [_ v]] (str acc v))))
-(println (filter dict (fn [[k _]] (even? k))))
-(println (map dict (fn [[k _]] (even? k))))
-(println (conj second-dict second-dict2))
-(println (delete second-dict 2))
-(println (add second-dict 2 "df"))
-(println (conj dict (-> dict2
-                        (get 2)
-                        (clojure.core/get :g))))
-
-;(println (reduce-left (rb-)))
