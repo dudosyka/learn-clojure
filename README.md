@@ -3,313 +3,263 @@
 ```
 Выполнил: Шляпников Александр P3322
 
-Вариант: rb-dict
+Вариант: -
 ```
 
-## Требования к разрабатываемой структуре данных
+## Требования к разрабатываемой программе
 
-1. Структура данных должна быть моноидом
-2. Структура данных должна быть неизменяемой
-3. Структура должна быть полиморфной
-4. Должны быть реализованы функции:
-    1. Добавление \ Удаление элементов
-    2. Фильтрация
-    3. Отображение
-    4. Левая и правая свертки
-5. Должен быть реализован набор unit-тестов
-6. Должен быть реализован набор property-based тестов 
-(не менее 3х тестов, в том числе описывающих спецификацию структуры как моноида)
+1. Программа должна работать в потоковом режиме
+2. Программа должа реализовывать несколько алгоритмов интерполяции 
+3. Обязательно должна быть реализована интерполяция отрезками
+4. Программа должна позволять пользователю конфигурировать ее работу при поможи аргументов
+5. Данные берутся из стандартного входа и подаются на стандартный выход
 
 ## Реализация
 
-### Реализация красно-черного дерева
-``` ./src/rb-dict/tree.clj ```
+### Реализация структуры для хранения точек
+``` ./src/interpolation/point.clj ```
+Тесты
+``` ./test/interpolation/point_test.clj ```
 
-Красно-черное дерево по своей сути это бинарное дерево поиска, в котором каждая вершина либо черная, либо красная. 
-Благодаря раскраске, а также ограничениям на основе этой раскраски эта структура позволяет получить бинарное дерево, 
-которое в среднем работает за O(logn).
-
-Ограничения накладываемые на дерево:
-1. Черная высота дерево одинакова в обоих поддеревьях
-2. Корень всегда черный
-3. Оба потомка красной вершины всегда черные
-
-Для соблюдения этих ограничений потребовалось реализовать функции балансировки при добавлении и удалении элементов
+Для работы с точками была создана структура данных Point, а также методы для сереализации и дисереализации
 
 ```clojure
-; Балансировка после добавления элемента
-(defn- balance-after-insert [parent current-side current]
-  (let [fb-failed? (and (red? current) (some? (red-child current)))]
-    (if (not fb-failed?)
-      (append parent current-side current)
-      (let [son-side (red-child current)
-            grand-son (get current son-side)
-            sibling-side (opposite current-side)
-            sibling (get parent sibling-side)]
-        (if (and (some? sibling) (red? sibling))
-          (-> parent
-              (make-red)
-              (append sibling-side (make-black sibling))
-              (append current-side (make-black current)))
-          (if (= current-side son-side)
-            (turn parent current sibling-side)
-            (big-turn parent current grand-son current-side)))))))
+(defrecord Point [x y])
+
+(defn to-string [^Point point]
+   (str "(" (:x point) ";" (:y point) ")"))
+
+(defn parse-from-line [line]
+   (let [split (split line #";")]
+      (if (= (count split) 2)
+         (->Point (parse-double (first split)) (parse-double (second split)))
+         (throw (Exception. "Bad line provided")))))
+```
+
+### Реализация чтения в потоковом режиме
+``` ./src/interpolation/reader.clj ```
+Тесты
+``` ./test/interpolation/reader_test.clj ```
+
+Был написан метод read, для построчного чтения данных из стандартного ввода и преобразования их в рекорд Point
+
+```clojure
+(defn read []
+   (let [line (try (read-line)
+                   (catch Exception _ nil))]
+      (if (nil? line)
+         nil
+         (parse-from-line line))))
+```
+
+### Реализация методов интерполяции
+``` ./src/interpolation/methods.clj ```
+Тесты
+``` ./test/interpolation/methods_test.clj ```
+
+В рамках работы были реализованы два метода
+
+Метод интерполяции отрезками
+
+```clojure
+
+(defmethod interpolate-x "linear" [_ points target]
+  ((fn [points cur left]
+     (if (nil? cur)
+       nil
+       (if (> target (:x cur))
+         (recur (drop 1 points) (first points) cur)
+         (if (< target (:x cur))
+           (if (nil? left)
+             nil
+             (+ (:y left) (* (/ (- target (:x left)) (- (:x cur) (:x left))) (- (:y cur) (:y left)))))
+           (if (= target (:x cur))
+             (:y cur)
+             nil))))) (drop 1 points) (first points) nil))
 
 ```
 
-При добавлении элемента балансировка требуется в случае, если мы добавляем новый элемент к красной вершине
-в таком случае мы взависимости от цвета родственников либо просто поднимаем красный цвет на уровень выше, 
-либо начинаем поворачивать дерево
-
-В случае с удаление балансировка нужна, когда удаляется черный лист без детей, в этом случае изменяется черная высота
-поэтому требуется балансироваться, в любом другом случае элемент может быть удален без изменения высоты, а потому не требует балансировки
-
-```clojure
-; Балансировка после удаления элемента
-(defn- balance-after-delete [parent parent-side]
-   (let [vertex (get parent parent-side)
-         sibling-side (opposite parent-side)
-         sibling (get parent sibling-side)
-         same-side-child (get sibling parent-side)]
-      ; В зависимости от цветов у родственников выполняем различные операции для балансировки
-      (match [(color sibling) (color (get sibling sibling-side)) (color same-side-child)]
-             [:black :red _]
-             (let [turned (turn parent sibling parent-side)]
-                (-> turned
-                    (assoc :color (color parent))
-                    (append sibling-side (make-black (get turned sibling-side)))
-                    (append parent-side (make-black (get turned parent-side)))))
-
-             [:black :black :red]
-             (let [turned (-> parent
-                              (append sibling-side
-                                      (-> same-side-child
-                                          (make-black)
-                                          (append sibling-side
-                                                  (-> sibling
-                                                      (make-red)
-                                                      (append parent-side (get same-side-child sibling-side))))))
-                              (append parent-side vertex))]
-                (balance-after-delete turned parent-side))
-
-             [:black :black :black]
-             (-> parent
-                 (make-black)
-                 (append sibling-side (make-red sibling)))
-
-             [:red _ _]
-             (let [turned (turn parent sibling parent-side)
-                   color-fixed (-> turned
-                                   (make-black)
-                                   (append parent-side (make-red (get turned parent-side))))
-                   fixed (balance-after-delete (get color-fixed parent-side) parent-side)]
-                (append color-fixed parent-side fixed)))))
-```
-
-Согласно требованиям (свойство моноида) дерево должно было также поддерживать операцию слияния с другим деревом
-
-Для этого был объявлен протокол, описывающий интерфейс операции слияния, а также добавлена реализация этого протокола для основных типов данных
+Метод интерполяции полиномом лагранжа
 
 ```clojure
 
-(defprotocol MergableValue
-  (merge [v1 v2]))
+(defn- calc-polynomial-for-point [point points target]
+  (reduce (fn [acc cur]
+            (if (= point cur)
+              acc
+              (* acc (/ (- target (:x cur)) (- (:x point) (:x cur)))))) 1 points))
 
-(extend-protocol MergableValue
-   Number
-   (merge [v1 v2]
-      (+ v1 v2))
-   String
-   (merge [v1 v2]
-      (str v1 v2))
-   IPersistentCollection
-   (merge [v1 v2]
-      (into v1 v2))
-   RBTreeVertex
-   (merge [v1 v2]
-      (loop [entries (entries v2)
-             v1 v1]
-         (if (some? (peek entries))
-            (let [[k v] (peek entries)]
-               (recur (pop entries) (insert v1 k v false)))
-            v1))))
+(defmethod interpolate-x "lagrange" [_ points target]
+  (reduce (fn [acc point]
+            (let [poly (calc-polynomial-for-point point points target)]
+              (+ acc (* (:y point) poly)))) 0 points))
 
 ```
 
-Для работы функций filter \ map \ reduce требовалось также реализовать возможность обхода дерева по часовой и против часовой стрелки,
-для того чтобы эти операции можно было комбинировать со стандартным словарем в clojure был добавлен интерфейс Sequential и его реалзация для IPersistentMap и RBTreeVertex
+Данные методы вычисляют значение функции в конкретной точки, для работы алгоритма без указания конкретных точек, а вычисления всех согласно частоте дискретизации был написан метод обертка 
 
 ```clojure
 
-(defprotocol Sequential
-   (entries [this])
-   (entries-mapped [this f])
-   (entries-filtered [this f])
-   (entries-reduced [this start f side]))
-
-(extend-protocol Sequential
-  IPersistentMap
-  (entries [this] (seq this))
-  (entries-filtered [this f] (filter f this))
-  (entries-mapped [this f] (map f this))
-  RBTreeVertex
-  (entries-mapped [this f]
-    (into [] (concat
-      (entries-mapped (:left this) f)
-      [(f [(:key this) (:value this)])]
-      (entries-mapped (:right this) f))))
-  (entries [this] (entries-mapped this identity))
-  (entries-filtered [this f]
-    (let [entry [(:key this) (:value this)]]
-       (into [] (concat
-                 (entries-filtered (:left this) f)
-                 (if (f entry) [entry] [])
-                 (entries-filtered (:right this) f)))))
-  (entries-reduced [this start f side]
-    (entries-reduced
-     (get this (opposite side))
-     (f (entries-reduced (get this side) start f side) [(:key this) (:value this)])
-     f side))
-  ; Реализация для nil позволяет не делать проверок в рамках методов на то, что перебор вершин дошел до листа
-  nil
-  (entries [_] [])
-  (entries-filtered [_ _] [])
-  (entries-mapped [_ _] [])
-  (entries-reduced [_ start _ _] start))
+(defn interpolate [algo window-size points step]
+  (let [points ((fn [points]
+                  (if (check-enclosed window-size points)
+                    points
+                    (recur (drop-last 1 points)))) points)]
+    (if (< (count points) 2)
+      nil
+      (map (fn [x] [(round-to x 7) (interpolate-x algo (reverse points) (round-to x 7))])
+           (take-while
+            (partial > (:x (first points)))
+            (iterate (partial + step) (+ step (:x (second points)))))))))
 
 ```
 
-Все остальные операции не включают какой либо специфики в своей реализации и работают также как с любым другим бинарным деревом поиска.
+В рамках него строится последовательность X для которых надо вычислить значение функции на основе полученных от пользователя данных.
 
-### Реализация интерфейса
-``` ./src/rb-dict/core.clj ```
-
-Для описания интерфейса был объявлен протокол IDict
+Программа также позволяет в своих аргументах задать окно, в рамках которого она будет брать точки, если такое окно было задано пользователем (не 0), то программа перед началом применения методов 
+нтерполяции отфильтрует точки при помощи метода check-enclosed
 
 ```clojure
 
-(defprotocol IDict
-  (get [this key])
-  (add [this key value])
-  (delete [this key])
-  (conj [this ^IDict dict])
-  (into [this sequence])
-  (reduce-right [this start func])
-  (reduce-left [this start func])
-  (map [this func])
-  (filter [this func])
-  (values [this])
-  (keys [this]))
+(defn check-enclosed [window-size points]
+  (or (zero? window-size) (zero? (count points)) (<= (- (:x (first points)) (:x (last points))) window-size)))
 
 ```
 
-А также тип реализующий данный протокол, а также ряд других для поддержки необходимых операций
+### Реализация CLI
+``` ./src/interpolation/cli.clj ```
+Тесты
+``` ./test/interpolation/cli_test.clj ```
 
+Для работы с аргументами командной строки было написано собственное решение
+
+Была добавлена структура Command и при помощи нее описаны доступные пользователю аргументы 
 ```clojure
 
-(deftype RBDict [rb-tree]
-  IDict
-  (get [_ key] (rb-tree/find-value rb-tree key))
-  (add [_ key value] (RBDict. (rb-tree/insert rb-tree key value)))
-  (delete [_ key] (RBDict. (rb-tree/delete rb-tree key)))
-  (conj [_ dict] (RBDict. (rb-tree/merge rb-tree dict)))
-  (into [this sequence] (reduce (fn [acc [k v]] (add acc k v)) this sequence))
-  (reduce-right [_ start func] (rb-tree/entries-reduced rb-tree start func :right))
-  (reduce-left [_ start func] (rb-tree/entries-reduced rb-tree start func :left))
-  (map [_ func] (rb-tree/entries-mapped rb-tree func))
-  (filter [_ func] (rb-tree/entries-filtered rb-tree func))
-  (values [_] (rb-tree/entries-mapped rb-tree second))
-  (keys [_] (rb-tree/entries-mapped rb-tree first))
-  ; Необходимо для поддержки вызовов (rb-dict key) (rb-dict key value) для операций вставки и поиска
-  IFn
-  (invoke [_ key]
-    (get _ key))
-  (invoke [_ key value]
-    (add _ key value))
-  ; Необходимо для поддержки стандартной операции сравнения, "красивого" принта, слияния и сравнения со стандартным словарем clojure 
-  IPersistentMap
-  (equiv [this obj]
-    (= (seq this) (seq obj)))
-  (seq [_]
-    (clojure.core/into '() (reverse (rb-tree/entries rb-tree))))
-  ; Необходимо для поддержки слияния с другими rb-dict
-  rb-dict.tree/MergableValue
-  (merge [_ dict]
-    (RBDict. (rb-tree/merge rb-tree (.-rb-tree dict)))))
+(defrecord Command [name usage docstring parse default required?])
 
+(def options {"--help"    (->Command "help" "--help" "Display help message"
+                                     nil nil false)
+              "--enclosed" (->Command "enclosed" "--enclosed WINDOW" "Enables enclosed mode: encloses the window with provided size and runs it through the data set. When WINDOW = 0, common mode is used"
+                                      #(parse-double %) "0" false)
+              "-s"         (->Command "s" "-s X" "Value of x step to find function in (f(x0 + x) = ?)"
+                                      #(parse-double %) "1" false)
+              "-a" (->Command "a" "-a ALGO1, ALGO2" "Interpolation algorithm(s)"
+                              #(map trim (split % #",")) ["lagrange"] false)})
 ```
 
-### Реализация unit-тестирования
-``` ./test/rb_tree_unit_test.clj ```
-
-Были написаны unit тесты для каждой из реализованых в интерфейсе функций, рассмотрены краевые случаи. В рамках реализации не были использованы какие то специфические, требующие пояснений методы
-
-### Реализация property-based тестирования
-``` ./src/rb_tree_prop_test.clj ```
-
-Для написания property-based тестирования были использваны генераторы и раннер из пакета test.check
-Всего было проверено 3 свойства структуры
-
-##### Свойство моноида - коммутативность операции слияния
+Для обработки полученных от пользователя аргументов был добавлен метод parse-options
 
 ```clojure
-(deftest test-commutative
-  (testing "Test that conjunction operations is commutative"
-    (is (check/quick-check
-         100
-         (prop/for-all [dict gen-dict
-                        second-dict gen-dict]
-                       (= (conj dict second-dict) (conj second-dict dict)))))))
+(defn parse-options [opts]
+  (let [opts (into {} (into [] (map #(into [] %) (partition 2 opts))))
+        required (->> options
+                      (filter #(:required? (second %)))
+                      (mapv first))
+        defaults (->> options
+                      (filter #(not (nil? (:default (second %)))))
+                      (map (fn [[k v]] [k (:default v)]))
+                      (into {}))
+        opts (conj defaults opts)
+        required-opts-size (->> required
+                                (map #(get opts %))
+                                (filter #(not (nil? %)))
+                                (count))]
+    (if (< (count required) required-opts-size)
+      nil
+      (try
+        (into {} (map (fn [[k v]]
+                        (let [option (get options k)]
+                          (when (nil? option)
+                            (throw (Exception. "Bad args")))
+                          [k ((:parse option) v)])) opts))
+        (catch Exception _ nil)))))
 ```
 
-##### Свойство моноида - операция слияния с нейтральным элементом не меняет структуру 
-
+После обработки аргументов запускается условно бесконечная рекурсия, которая последовательно читает точки и пытается вычислить значения в промежутках между ними согласно конфигурации переданной пользователем
 ```clojure
-(deftest test-neutral-element
-  (testing "Test operations with neutral element"
-    (is (check/quick-check
-         100
-         (prop/for-all [dict gen-dict]
-                       (= (conj dict (rb-dict)) dict))))
-    (is (check/quick-check
-         100
-         (prop/for-all [dict gen-dict]
-                       (= (conj (rb-dict) dict) dict))))))
+(defn -main [& opts]
+  (let [opts (parse-options opts)]
+    (if (or (nil? opts) (contains? opts "--help"))
+      (display-usage)
+      (println ((fn [init]
+                  (let [point (read)]
+                    (if (nil? point)
+                      "EOF"
+                      (let [list (conj init point)]
+                        (println (str "-> " (join " " (reverse (map to-string list)))))
+                        (doseq [algo (get opts "-a")]
+                          (println (describe algo (interpolate algo (get opts "--enclosed") list (get opts "-s")))))
+                        (recur list))))) '())))))
 ```
 
-##### Свойство красно-черного дерева - у красной вершины 2 черных сына
+## Примеры запуска программы
 
-```clojure
-(defn check-valid-node [node]
-  (if (black? node)
-    true
-    (and
-     (= (red-child node) nil)
-     (or
-      (= (child-count node) 2)
-      (= (child-count node) 0)))))
+#### Help - доступные аргументы
+```shell
+╭─dudosyka@MacBook-Pro-Alex-4 ~/IdeaProjects/study-clojure ‹master●› 
+╰─$ cat ./interpolation.test | clj -M -m interpolation.cli --help
+Usage: cli <args>
+Available args: 
+help: --help, Display help message 
+enclosed: --enclosed WINDOW, Enables enclosed mode: encloses the window with provided size and runs it through the data set. When WINDOW = 0, common mode is used -- Default: 0
+s: -s X, Value of x step to find function in (f(x0 + x) = ?) -- Default: 1
+a: -a ALGO1, ALGO2, Interpolation algorithm(s) -- Default: ["lagrange"]
+```
 
-(defn check-no-red-vertex-with-red-sons [tree]
-  (and
-   (check-no-red-vertex-with-red-sons (:left dict))
-   (check-valid-node tree)
-   (check-no-red-vertex-with-red-sons (:right dict))))
 
-(deftest test-no-red-vertex-with-red-sons
-  (testing "Test that every red vertex have two black sons"
-    (is (check/quick-check
-         100
-         (prop/for-all [dict gen-dict]
-                       (= true (check-no-red-vertex-with-red-sons dict)))))))
+#### Запуск с интервалом 0.5 без ограничения в окне
+Ввод:
+```text
+1;1
+2;2
+3;3
+6;8
+```
+Результат:
+```shell
+╭─dudosyka@MacBook-Pro-Alex-4 ~/IdeaProjects/study-clojure ‹master●› 
+╰─$ cat ./interpolation.test | clj -M -m interpolation.cli -s 0.5 -a lagrange             
+-> (1.0;1.0)
+Interpolated by Lagrange: Not enough data.
+-> (1.0;1.0) (2.0;2.0)
+Interpolated by Lagrange: f(1.500)=1.500
+-> (1.0;1.0) (2.0;2.0) (5.0;3.0)
+Interpolated by Lagrange: f(2.500)=2.375; f(3.000)=2.667; f(3.500)=2.875; f(4.000)=3.000; f(4.500)=3.042
+-> (1.0;1.0) (2.0;2.0) (5.0;3.0) (6.0;8.0)
+Interpolated by Lagrange: f(5.500)=4.975
+EOF
+```
+
+
+#### Запуск с интервалом 0.5 с ограничением в окне на 2
+Ввод:
+```text
+1;1
+2;2
+3;3
+6;8
+```
+Результат:
+```shell
+╭─dudosyka@MacBook-Pro-Alex-4 ~/IdeaProjects/study-clojure ‹master●› 
+╰─$ cat ./interpolation.test | clj -M -m interpolation.cli --enclosed 2 -s 0.5 -a lagrange
+-> (1.0;1.0)
+Interpolated by Lagrange: Not enough data.
+-> (1.0;1.0) (2.0;2.0)
+Interpolated by Lagrange: f(1.500)=1.500
+-> (1.0;1.0) (2.0;2.0) (5.0;3.0)
+Interpolated by Lagrange: Not enough data.
+-> (1.0;1.0) (2.0;2.0) (5.0;3.0) (6.0;8.0)
+Interpolated by Lagrange: f(5.500)=5.500
+EOF
 ```
 
 ## Вывод
 
-В рамках работы получилось ещё глубже покрузиться в язык, частности получилось разобраться:
+В рамках работы не удалось особенное в чем то преисполниться, но получилось попробовать
 
-1. С работой с абстракциями, в частности описание типов, протоколов их реализации, расширения стандартных типов языка. Стала ясна логика построения структур данных в clojure, как при помощи него описать какую-то предметную область.
-2. С рекурсией... С ней в принципе было все понятно, но было интересно описывать операции обхода и манипуляции с элементами дерева именно при помощи рекурсии, такой способ позволяет, на мой взгляд, более деклоративно подходить к описанию поведения того или иного объекта.
-3. С тредами, речь про функции -> ->> опять же, концепция так же, как и с рекурсией была ясна и до этого, но работа дала понять насколько это мощный инструмент для работы с неизменяемыми типами, не нужно зарываться в несколько уровней сложности, можно просто описать последовательность действий.
-4. С написанием тестов, в частности с property-based тестами, до этого в работе данный подход не использовал, мне он показался очень полезным, позволяет четко и понятно описывать ограничения предъявляемые к структурам, не вникая в то, с какими именно данными эти структуры работают.
+1. Работу с мультиметодами, в целом неплохое решение для организации полиморфизма, если не нужно описывать какую то огромную функциональность и не к чему приделать прокотолы
+2. Работу с вводом выводом, в частности ее тестирование (методы with-in-str, with-out-str), удобно тестировать функции которые ждут на вход что то поточное
 
-Работа интересная и полезная.
+В целом здорово конечно, но опять матан :(
